@@ -1,0 +1,42 @@
+<launch>
+  <!-- 启动 LIVOX 雷达驱动 -->
+  <include file="$(find livox_ros_driver2)/launch_ROS1/msg_MID360.launch" />
+
+  <!-- 启动 LIVOX CustomMsg 到 PointCloud2 转换器 -->
+  <node pkg="livox_ros_driver2"
+        type="livox_converter.py"
+        name="livox_converter"
+        output="screen" />
+
+  <!-- 启动 PointCloud2 到 LaserScan 转换 -->
+  <node pkg="pointcloud_to_laserscan"
+        type="pointcloud_to_laserscan_node"
+        name="pointcloud_to_laserscan"
+        output="screen">
+    <remap from="cloud_in" to="/livox/cloud" />
+    <remap from="scan" to="/scan" />
+    <param name="min_height" value="0.0" />
+    <param name="max_height" value="0.2" />
+    <param name="angle_min" value="-3.14159" />
+    <param name="angle_max" value="3.14159" />
+    <param name="range_min" value="0.30" />
+    <param name="range_max" value="30.0" />
+  </node>
+
+  <!-- 跟随控制：默认直接订阅视觉状态 /person_track/vision_state -->
+  <node pkg="kuavo_person_follow"
+        type="follow_controller_node.py"
+        name="follow_controller"
+        output="screen">
+    <param name="state_topic" value="/person_track/vision_state" />
+    <!-- 目前直接将控制输出到 /cmd_vel，由 Kuavo 系统内部处理 -->
+    <param name="cmd_topic" value="/cmd_vel" />
+    <param name="dist_target" value="2.5" />
+    <param name="v_max" value="0.4" />
+    <param name="yaw_rate_max" value="0.5" />
+    <!-- 激光雷达避障参数：0.7m 内强制停车，1.0m 内线性减速 -->
+    <param name="scan_topic" value="/scan" />
+    <param name="stop_dist" value="0.7" />
+    <param name="slow_dist" value="1.0" />
+  </node>
+</launch>
