@@ -1,0 +1,1 @@
+/home/kuavo/kuavo-ros-following/devel/.private/kuavo_person_follow/share/kuavo_person_follow/cmake/kuavo_person_follow-msg-paths.cmake

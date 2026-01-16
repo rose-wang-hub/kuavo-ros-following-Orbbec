@@ -1,0 +1,1 @@
+/home/kuavo/kuavo-ros-following/devel/.private/kuavo_person_follow/share/gennodejs/ros/kuavo_person_follow/msg/_index.js

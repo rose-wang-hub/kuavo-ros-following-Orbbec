@@ -1,0 +1,1 @@
+/home/kuavo/kuavo-ros-following/devel/.private/kuavo_person_follow/share/common-lisp/ros/kuavo_person_follow/msg/kuavo_person_follow-msg.asd

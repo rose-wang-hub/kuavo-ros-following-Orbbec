@@ -1,0 +1,1 @@
+/home/kuavo/kuavo-ros-following/devel/.private/catkin_tools_prebuild/setup.zsh

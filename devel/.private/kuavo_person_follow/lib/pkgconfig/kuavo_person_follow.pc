@@ -1,0 +1,8 @@
+prefix=/home/kuavo/kuavo-ros-following/devel/.private/kuavo_person_follow
+
+Name: kuavo_person_follow
+Description: Description of kuavo_person_follow
+Version: 0.0.1
+Cflags: -I/home/kuavo/kuavo-ros-following/devel/.private/kuavo_person_follow/include
+Libs: -L${prefix}/lib 
+Requires: rospy std_msgs geometry_msgs sensor_msgs nav_msgs tf message_runtime

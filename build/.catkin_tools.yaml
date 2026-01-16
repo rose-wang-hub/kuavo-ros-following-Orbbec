@@ -1,0 +1,6 @@
+devel_space: /home/kuavo/kuavo-ros-following/devel
+install: false
+install_space: /home/kuavo/kuavo-ros-following/install
+profile: default
+source_space: /home/kuavo/kuavo-ros-following/src
+workspace: /home/kuavo/kuavo-ros-following

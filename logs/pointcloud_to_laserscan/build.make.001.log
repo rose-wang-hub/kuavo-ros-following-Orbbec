@@ -1,0 +1,8 @@
+[35m[1mConsolidate compiler generated dependencies of target pointcloud_to_laserscan[0m
+[35m[1mConsolidate compiler generated dependencies of target laserscan_to_pointcloud[0m
+[ 37%] Built target laserscan_to_pointcloud
+[ 50%] Built target pointcloud_to_laserscan
+[35m[1mConsolidate compiler generated dependencies of target pointcloud_to_laserscan_node[0m
+[35m[1mConsolidate compiler generated dependencies of target laserscan_to_pointcloud_node[0m
+[100%] Built target laserscan_to_pointcloud_node
+[100%] Built target pointcloud_to_laserscan_node

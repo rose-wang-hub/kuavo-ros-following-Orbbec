@@ -1,0 +1,2 @@
+- setup-file:
+    local-name: /home/kuavo/kuavo-ros-following/devel/.private/pointcloud_to_laserscan/setup.sh

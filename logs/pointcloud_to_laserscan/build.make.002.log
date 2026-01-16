@@ -1,0 +1,4 @@
+[ 25%] Built target laserscan_to_pointcloud
+[ 50%] Built target pointcloud_to_laserscan
+[100%] Built target laserscan_to_pointcloud_node
+[100%] Built target pointcloud_to_laserscan_node

@@ -1,0 +1,1 @@
+/home/kuavo/kuavo-ros-following/devel/.private/kuavo_person_follow/lib/python3/dist-packages/kuavo_person_follow/msg/_PersonState.py
