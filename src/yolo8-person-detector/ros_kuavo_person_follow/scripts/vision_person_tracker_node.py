@@ -19,6 +19,8 @@ import os
 import sys
 
 import rospy
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
 from kuavo_person_follow.msg import PersonState
 
 
@@ -43,6 +45,8 @@ def main():
     HumanStateEstimator, HumanState = import_human_estimator(detector_root)
 
     pub = rospy.Publisher('/person_track/vision_state', PersonState, queue_size=10)
+    image_pub = rospy.Publisher('/person_track/debug_image', Image, queue_size=10)
+    bridge = CvBridge()
 
     rate_hz = rospy.get_param('~rate', 30.0)
     rate = rospy.Rate(rate_hz)
@@ -66,6 +70,12 @@ def main():
             msg.confidence = 1.0 if state.valid else 0.0
 
             pub.publish(msg)
+            
+            # 发布调试图像
+            if hasattr(estimator, 'last_debug_image') and estimator.last_debug_image is not None:
+                image_msg = bridge.cv2_to_imgmsg(estimator.last_debug_image, encoding="bgr8")
+                image_pub.publish(image_msg)
+            
             rate.sleep()
     except rospy.ROSInterruptException:
         pass

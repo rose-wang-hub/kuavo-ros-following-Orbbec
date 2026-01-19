@@ -188,6 +188,10 @@ def cosine_similarity(f1, f2):
 
 def select_roi_with_mouse(pipeline):
     """使用鼠标在实时 RealSense 彩色画面中选择初始 ROI，返回 (x, y, w, h)。"""
+    if not os.environ.get('DISPLAY'):
+        print("没有图形界面，使用默认 ROI (100, 100, 200, 200)")
+        return (100, 100, 200, 200)
+
     selecting = False
     selection_complete = False
     start_pt = (0, 0)
@@ -986,7 +990,8 @@ class HumanStateEstimator:
         cv2.putText(debug_image, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
         cv2.putText(debug_image, f"Depth: {z_m:.2f}m", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
 
-        cv2.imshow("Kuavo Person Tracking", debug_image)
+        # 存储调试图像供发布
+        self.last_debug_image = debug_image.copy()
 
         return HumanState(x=x_cam, z=z_cam, vx=vx, vz=vz, yaw_err=yaw_err, valid=state_valid)
 

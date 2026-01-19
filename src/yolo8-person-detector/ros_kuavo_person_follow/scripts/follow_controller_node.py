@@ -80,8 +80,7 @@ class FollowControllerNode(object):
     def __init__(self):
         self.pid = PIDFollower()
 
-        # 允许通过参数指定输出控制话题，默认沿用通用的 /cmd_vel
-        # 在 Kuavo4Pro 上建议在 launch 中将其设为 /cmd_vel_app，
+        # 允许通过参数指定输出控制话题，默认沿用通用的 /cmd_vel  
         # 通过现有的多路复用/安全模块再下发到下位机。
         cmd_topic = rospy.get_param('~cmd_topic', '/cmd_vel')
         self.pub = rospy.Publisher(cmd_topic, Twist, queue_size=10)
@@ -101,12 +100,13 @@ class FollowControllerNode(object):
         # 激光雷达安全控制参数
         self.scan_topic = rospy.get_param('~scan_topic', '/scan')
         self.front_angle_deg = rospy.get_param('~front_angle_deg', 30.0)
-        self.stop_dist = rospy.get_param('~stop_dist', 0.6)
-        self.slow_dist = rospy.get_param('~slow_dist', 1.0)
+        self.stop_dist = rospy.get_param('~stop_dist', 0.7)
+        self.slow_dist = 1.0  # 开始减速的距离
         self.scan_timeout = rospy.get_param('~scan_timeout', 0.5)
 
         self._min_front_dist = None
         self._last_scan_time = None
+        self.stop_until_time = None  # 用于强制停止1秒的计时器
 
         rospy.Subscriber(self.scan_topic, LaserScan, self.scan_cb, queue_size=1)
         rospy.loginfo('follow_controller_node 使用激光雷达 %s 做前向安全约束', self.scan_topic)
@@ -135,8 +135,14 @@ class FollowControllerNode(object):
             return
 
         self._min_front_dist = min(candidates)
-        self._last_scan_time = rospy.Time.now().to_sec()
+        self._last_scan_time = now = rospy.Time.now().to_sec()
         rospy.loginfo('Laser scan: min_front_dist = %.3f m', self._min_front_dist)
+
+        # 如果检测到前方距离小于停止距离，强制停止1秒
+        if self._min_front_dist < self.stop_dist:
+            if self.stop_until_time is None:  # 避免重复设置
+                self.stop_until_time = now + 1.0
+                rospy.logwarn('Obstacle too close (%.3f m < %.3f m), stopping for 1 second!', self._min_front_dist, self.stop_dist)
 
     def state_cb(self, state):
         v, w = self.pid.compute(state)
@@ -144,19 +150,25 @@ class FollowControllerNode(object):
         # 结合激光雷达最近距离，对前向线速度做安全限幅
         v_safe = v
         now = rospy.Time.now().to_sec()
-        if self._min_front_dist is not None and self._last_scan_time is not None:
-            if now - self._last_scan_time < self.scan_timeout:
-                d = self._min_front_dist
-                if d < self.stop_dist:
-                    # 前方过近，强制停车
-                    v_safe = 0.0
-                    rospy.logwarn('Obstacle too close (%.3f m < %.3f m), stopping!', d, self.stop_dist)
-                elif d < self.slow_dist and v_safe > 0.0:
-                    # 在减速带内，按比例降低速度
-                    ratio = (d - self.stop_dist) / max(1e-3, self.slow_dist - self.stop_dist)
-                    ratio = max(0.0, min(1.0, ratio))
-                    v_safe = v_safe * ratio
-                    rospy.loginfo('Slowing down: dist=%.3f m, ratio=%.3f, v_safe=%.3f', d, ratio, v_safe)
+        # 检查是否在强制停止期间
+        if self.stop_until_time is not None and now < self.stop_until_time:
+            v_safe = 0.0
+            rospy.loginfo('Forced stop active until %.3f', self.stop_until_time)
+        else:
+            # 停止期结束，重置
+            if self.stop_until_time is not None:
+                self.stop_until_time = None
+                rospy.loginfo('Forced stop ended, resuming tracking')
+            # 检查距离，进行减速
+            if self._min_front_dist is not None and self._last_scan_time is not None:
+                if now - self._last_scan_time < self.scan_timeout:
+                    d = self._min_front_dist
+                    if d < self.slow_dist and v_safe > 0.0:
+                        # 在减速带内，按比例降低速度
+                        ratio = (d - self.stop_dist) / max(1e-3, self.slow_dist - self.stop_dist)
+                        ratio = max(0.0, min(1.0, ratio))
+                        v_safe = v_safe * ratio
+                        rospy.loginfo('Slowing down: dist=%.3f m, ratio=%.3f, v_safe=%.3f', d, ratio, v_safe)
 
         cmd = Twist()
         cmd.linear.x = v_safe

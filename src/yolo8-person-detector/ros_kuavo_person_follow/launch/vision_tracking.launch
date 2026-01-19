@@ -14,4 +14,11 @@
     <param name="detector_root" value="/home/kuavo/kuavo-ros-following/src/yolo8-person-detector" />
     <param name="rate" value="30.0" />
   </node>
+
+  <!-- 显示调试图像 -->
+  <node pkg="rqt_image_view"
+        type="rqt_image_view"
+        name="debug_image_view">
+    <param name="image_topic" value="/person_track/debug_image" />
+  </node>
 </launch>
