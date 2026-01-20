@@ -228,7 +228,7 @@ def select_roi_with_mouse(pipeline):
     print("请在窗口中用鼠标拖动选择跟随目标，按 s/空格/回车确认，按 q 退出")
 
     while True:
-        frames = pipeline.wait_for_frames()
+        frames = pipeline.wait_for_frames(timeout_ms=10000)
         color_frame = frames.get_color_frame()
         if not color_frame:
             continue
@@ -295,11 +295,19 @@ class HumanStateEstimator:
                     def __init__(self, device: str):
                         self.device = device
                         try:
-                            weights = models.ResNet18_Weights.DEFAULT
-                            backbone = models.resnet18(weights=weights)
+                            weights = models.ResNet50_Weights.DEFAULT
+                            backbone = models.resnet50(weights=weights)
                         except Exception:
-                            backbone = models.resnet18(weights=None)
+                            backbone = models.resnet50(weights=None)
                         backbone.fc = torch.nn.Identity()
+                        # 加载用户训练的ReID模型
+                        checkpoint_path = "/home/eric/following-test/kuavo-ros-following/ReID/reid_resnet50_best.pth"
+                        if os.path.exists(checkpoint_path):
+                            state_dict = torch.load(checkpoint_path, map_location=device)
+                            backbone.load_state_dict(state_dict, strict=False)
+                            print("加载用户ReID模型成功")
+                        else:
+                            print("用户ReID模型文件不存在，使用默认ResNet50")
                         self.model = backbone.to(self.device)
                         self.model.eval()
 
@@ -325,9 +333,9 @@ class HumanStateEstimator:
                         return feats
 
                 device = "cuda" if torch.cuda.is_available() else "cpu"
-                print("初始化深度 ReID 模型 ResNet18，设备:", device)
+                print("初始化深度 ReID 模型 ResNet50，设备:", device)
                 reid_extractor = ResNetReIDExtractor(device)
-                print("深度 ReID 模型初始化成功 (ResNet18)")
+                print("深度 ReID 模型初始化成功 (ResNet50)")
             except Exception as e:
                 reid_extractor = None
                 print("警告：深度 ReID 模型初始化失败，将使用颜色直方图 ReID：", e)
