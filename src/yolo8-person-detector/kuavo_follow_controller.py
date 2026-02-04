@@ -1,9 +1,9 @@
 """Kuavo4Pro 人形跟随示例
 
-本文件在现有 RealSense + YOLO 检测基础上，提供：
+本文件在现有 Orbbec Gemini 335L + YOLO 检测基础上，提供：
 
 1. 人相对机器人坐标与速度的简化接口：HumanStateEstimator
-   - 使用 RealSense 彩色 + 深度
+   - 使用 Orbbec Gemini 335L 彩色 + 深度
    - 使用 YOLOv8 检测最近的人
    - 输出 (x, z, vx, vz, yaw_err)
      * x: 机器人坐标系下的左右偏移（左为正，单位 m）
@@ -21,7 +21,7 @@
      * 预留 send_command(v, yaw_rate) 方法，用户可对接 Kuavo 的
        MPC / RL 控制接口，将 (v, yaw_rate) 作为参考轨迹或高层指令。
 
-依赖：pyrealsense2, opencv-python, numpy, ultralytics
+依赖：pyorbbecsdk, opencv-python, numpy, ultralytics
 
 运行方式（仅测试感知与控制输出，不驱动真实机器人）：
 
@@ -37,7 +37,7 @@ from dataclasses import dataclass
 
 import cv2
 import numpy as np
-import pyrealsense2 as rs
+import pyorbbecsdk as ob
 from ultralytics import YOLO
 from scipy.cluster.hierarchy import fclusterdata
 
@@ -187,7 +187,7 @@ def cosine_similarity(f1, f2):
 
 
 def select_roi_with_mouse(pipeline):
-    """使用鼠标在实时 RealSense 彩色画面中选择初始 ROI，返回 (x, y, w, h)。"""
+    """使用鼠标在实时 Orbbec Gemini 335L 彩色画面中选择初始 ROI，返回 (x, y, w, h)。"""
     if not os.environ.get('DISPLAY'):
         print("没有图形界面，使用默认 ROI (100, 100, 200, 200)")
         return (100, 100, 200, 200)
@@ -228,11 +228,14 @@ def select_roi_with_mouse(pipeline):
     print("请在窗口中用鼠标拖动选择跟随目标，按 s/空格/回车确认，按 q 退出")
 
     while True:
-        frames = pipeline.wait_for_frames(timeout_ms=10000)
+        frames = pipeline.wait_for_frames(100)
         color_frame = frames.get_color_frame()
         if not color_frame:
             continue
-        color_image = np.asanyarray(color_frame.get_data())
+        # Orbbec 数据获取
+        color_data = color_frame.get_data()
+        color_image = np.frombuffer(color_data, dtype=np.uint8).reshape((color_frame.get_height(), color_frame.get_width(), 3))
+        color_image = cv2.cvtColor(color_image, cv2.COLOR_RGB2BGR)
 
         display_image = color_image.copy()
         if selecting:
@@ -256,7 +259,7 @@ def select_roi_with_mouse(pipeline):
 
 
 class HumanStateEstimator:
-    """基于 RealSense + YOLO + KCF + ReID + 卡尔曼 的人相对机器人状态估计。
+    """基于 Orbbec Gemini 335L + YOLO + KCF + ReID + 卡尔曼 的人相对机器人状态估计。
 
     - 启动时用鼠标框选 ROI 初始化 KCF 与目标外观特征
     - 每帧先用 KCF 跟踪，再用 YOLO 检测 + ReID 修正 ROI、自适应缩放
@@ -265,20 +268,38 @@ class HumanStateEstimator:
     """
 
     def __init__(self, yolo_model_path: str = YOLO_MODEL_PATH):
-        # RealSense 初始化
-        self.pipeline = rs.pipeline()
-        config = rs.config()
-        config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-        config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+        # Orbbec Gemini 335L 初始化
+        self.pipeline = ob.Pipeline()
+        config = ob.Config()
+        
+        # 启用彩色流
+        color_profile = self.pipeline.get_stream_profile_list(ob.OBSensorType.COLOR_SENSOR).get_video_stream_profile(0, 0, ob.OBFormat.RGB, 30)
+        config.enable_stream(color_profile)
+        
+        # 启用深度流
+        depth_profile = self.pipeline.get_stream_profile_list(ob.OBSensorType.DEPTH_SENSOR).get_video_stream_profile(0, 0, ob.OBFormat.Y16, 30)
+        config.enable_stream(depth_profile)
+        
         self.profile = self.pipeline.start(config)
 
         # 获取彩色相机内参，用于像素 -> 相机坐标
-        color_stream = self.profile.get_stream(rs.stream.color).as_video_stream_profile()
-        intr = color_stream.get_intrinsics()
-        self.fx = intr.fx
-        self.fy = intr.fy
-        self.cx = intr.ppx
-        self.cy = intr.ppy
+        # 假设内参可以通过profile获取，类似其他相机SDK
+        # 如果不可用，可能需要硬编码或从设备获取
+        # 如果不可用，可能需要硬编码或从设备获取
+        try:
+            color_intrinsics = color_profile.get_intrinsics()
+            self.fx = color_intrinsics.fx
+            self.fy = color_intrinsics.fy
+            self.cx = color_intrinsics.cx
+            self.cy = color_intrinsics.cy
+        except AttributeError:
+            # 如果没有直接方法，尝试从帧获取或使用默认值
+            # Gemini 335L 典型内参（需要根据实际校准调整）
+            self.fx = 600.0  # 焦距x
+            self.fy = 600.0  # 焦距y
+            self.cx = 320.0  # 光心x
+            self.cy = 240.0  # 光心y
+            print("警告：无法获取相机内参，使用默认值")
 
         # YOLO 模型
         self.model = YOLO(yolo_model_path)
@@ -300,7 +321,7 @@ class HumanStateEstimator:
                         except Exception:
                             backbone = models.resnet50(weights=None)
                         backbone.fc = torch.nn.Identity()
-                        # 加载用户训练的ReID模型
+                        # 加载ReID模型
                         checkpoint_path = "/home/eric/following-test/kuavo-ros-following/ReID/reid_resnet50_best.pth"
                         if os.path.exists(checkpoint_path):
                             state_dict = torch.load(checkpoint_path, map_location=device)
@@ -362,15 +383,21 @@ class HumanStateEstimator:
         self.roi = roi
 
         # 先取一帧彩色 + 深度图像，用于初始化 tracker、外观特征以及参考深度
-        frames = self.pipeline.wait_for_frames()
+        frames = self.pipeline.wait_for_frames(100)
         color_frame = frames.get_color_frame()
         depth_frame = frames.get_depth_frame()
         if not color_frame or not depth_frame:
             self.pipeline.stop()
             cv2.destroyAllWindows()
             raise SystemExit("初始化时未获取到彩色/深度帧，程序退出")
-        init_color = np.asanyarray(color_frame.get_data())
-        init_depth = np.asanyarray(depth_frame.get_data())
+        
+        # Orbbec 数据获取方式
+        color_data = color_frame.get_data()
+        init_color = np.frombuffer(color_data, dtype=np.uint8).reshape((color_frame.get_height(), color_frame.get_width(), 3))
+        init_color = cv2.cvtColor(init_color, cv2.COLOR_RGB2BGR)  # 如果需要转换
+        
+        depth_data = depth_frame.get_data()
+        init_depth = np.frombuffer(depth_data, dtype=np.uint16).reshape((depth_frame.get_height(), depth_frame.get_width()))
 
         self.tracker.init(init_color, self.roi)
 
@@ -470,14 +497,19 @@ class HumanStateEstimator:
 
     def get_state(self) -> HumanState:
         """读取一帧，运行 YOLO+KCF+ReID+卡尔曼 跟踪，返回 HumanState。"""
-        frames = self.pipeline.wait_for_frames()
+        frames = self.pipeline.wait_for_frames(100)
         color_frame = frames.get_color_frame()
         depth_frame = frames.get_depth_frame()
         if not color_frame or not depth_frame:
             return HumanState(0.0, 0.0, 0.0, 0.0, 0.0, False)
 
-        color_image = np.asanyarray(color_frame.get_data())
-        depth_image = np.asanyarray(depth_frame.get_data())
+        # Orbbec 数据获取
+        color_data = color_frame.get_data()
+        color_image = np.frombuffer(color_data, dtype=np.uint8).reshape((color_frame.get_height(), color_frame.get_width(), 3))
+        color_image = cv2.cvtColor(color_image, cv2.COLOR_RGB2BGR)
+        
+        depth_data = depth_frame.get_data()
+        depth_image = np.frombuffer(depth_data, dtype=np.uint16).reshape((depth_frame.get_height(), depth_frame.get_width()))
 
         # 轻微高斯滤波，抑制噪声
         color_blur = cv2.GaussianBlur(color_image, (5, 5), 0)
